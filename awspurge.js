@@ -20,7 +20,6 @@ function AwsPurgeAjax() {
             dataType: "json",
             // context: document.body,
             success: function (data) {
-                console.log(data);
                 apbox_info.slideUp(500, function(){
                     apbox_info.text('Done. ' + data.processed + ' URLs purged. Content changes are now visible');
                     apbox_info.removeClass('spinner');
