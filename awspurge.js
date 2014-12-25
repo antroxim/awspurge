@@ -14,12 +14,13 @@ function AwsPurgeAjax() {
 
     jQuery.ajax({
             url: ajaxurl,
-            cache: false,
-            type: 'POST',
+//            cache: false,
+//            type: 'POST',
             data: {action: 'awspurgeajax'},
             dataType: "json",
             // context: document.body,
             success: function (data) {
+                console.log(data);
                 apbox_info.slideUp(500, function(){
                     apbox_info.text('Done. ' + data.processed + ' URLs purged. Content changes are now visible');
                     apbox_info.removeClass('spinner');
@@ -27,6 +28,7 @@ function AwsPurgeAjax() {
                 });
             },
             error: function (request) {
+                console.log(request);
                 apbox_info.slideUp(500, function(){
                     apbox_info.text('Oops, error occured while purging');
                     apbox_info.removeClass('spinner');

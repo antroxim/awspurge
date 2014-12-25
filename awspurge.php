@@ -43,15 +43,6 @@ define('AWS_PURGE_DIR', __DIR__ . '/');
 class AwsPurge
 {
 
-	// Varnish instances config
-	protected $config = array(
-		'awspurge_domains' => array(
-			'radaronline.com',
-		),
-		'awspurge_cache_heads' => array(
-			'local.radaronline.com:6081'
-		),
-	);
 	// Collects URLs to purge
 	protected $purgeUrls = array();
 
@@ -97,7 +88,6 @@ class AwsPurge
 	{
 		if (!empty($this->purgeUrls)) {
 			update_option('aws_purge_list', $this->purgeUrls);
-			update_option('aws_purge_total_count', count($this->purgeUrls));
 		}
 	}
 
@@ -115,6 +105,9 @@ class AwsPurge
 
 	function awsPurgeAjax()
 	{
+		if(function_exists('ignore_user_abort')){
+			ignore_user_abort(true);
+		}
 		$count = count($this->purgeUrls);
 		$lock = wp_cache_get('aws_purge_lock');
 		if (!$lock) {
@@ -130,10 +123,11 @@ class AwsPurge
 	function runPurgeWorker()
 	{
 		foreach ($this->purgeUrls as $key => $url) {
-			$this->purgeUrl($url);
-			unset($this->purgeUrls[$key]);
-			update_option('aws_purge_list', $this->purgeUrls);
+			if($this->purgeUrl($url)){
+				unset($this->purgeUrls[$key]);
+			}
 		}
+			update_option('aws_purge_list', $this->purgeUrls);
 	}
 
 	/**
