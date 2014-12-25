@@ -220,7 +220,7 @@ class AwsPurge
 			$rqst->rtype = 'PURGE';
 			$rqst->balancer = $varn;
 			$rqst->domain = $p['host'];
-			$rqst->path = $p['path'];
+			$rqst->path = $path;
 			$rqst->uri = $rqst->scheme . '://' . $rqst->domain . $rqst->path . $pregex;
 			$rqst->uribal = $rqst->scheme . '://' . $rqst->balancer . $rqst->path . $pregex;
 			$rqst->headers = array(
