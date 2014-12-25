@@ -115,6 +115,7 @@ class AwsPurge
 
 	function awsPurgeAjax()
 	{
+		$count = count($this->purgeUrls);
 		$lock = wp_cache_get('aws_purge_lock');
 		if (!$lock) {
 			wp_cache_set('aws_purge_lock', 1, '', 5);
@@ -122,7 +123,7 @@ class AwsPurge
 			wp_cache_replace('aws_purge_lock', 0, '', 5);
 		}
 
-		wp_send_json(array('processed' => count($this->purgeUrls)));
+		wp_send_json(array('processed' => $count));
 	}
 
 
