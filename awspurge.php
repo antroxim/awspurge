@@ -74,6 +74,8 @@ class AwsPurge
 		add_action('shutdown', array($this, 'setPurgeList'));
 		if (!empty($this->purgeUrls)) {
 			add_action('admin_enqueue_scripts', array($this, 'initPurgeScript'));
+		} else{
+			wp_cache_set('aws_purge_lock', 0);
 		}
 		add_action('wp_ajax_awspurgeajax', array($this, 'awsPurgeAjax'));
 
@@ -125,7 +127,6 @@ class AwsPurge
 
 	function runPurgeWorker()
 	{
-		ignore_user_abort(TRUE);
 		foreach ($this->purgeUrls as $key => $url) {
 			$this->purgeUrl($url);
 			unset($this->purgeUrls[$key]);
