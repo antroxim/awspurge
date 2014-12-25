@@ -263,9 +263,7 @@ class AwsPurge
 
 		}
 
-		foreach($this->processRequest($requests) as $rqst){
-			$this->processRequest($rqst);
-		}
+		$this->processRequest($requests);
 
 		do_action('after_purge_url', $url);
 	}
