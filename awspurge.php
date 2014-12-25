@@ -123,9 +123,8 @@ class AwsPurge
 	function runPurgeWorker()
 	{
 		foreach ($this->purgeUrls as $key => $url) {
-			if($this->purgeUrl($url)){
-				unset($this->purgeUrls[$key]);
-			}
+			$this->purgeUrl($url);
+			unset($this->purgeUrls[$key]);
 		}
 			update_option('aws_purge_list', $this->purgeUrls);
 	}
