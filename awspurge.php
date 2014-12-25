@@ -234,7 +234,6 @@ class AwsPurge
 		global $aws_varnish_ips;
 		if (empty($aws_varnish_ips)) {
 			$aws_varnish_ips = array($p['host']);
-			$aws_varnish_ips = array('local.radaronline.com:6081');
 		}
 		if (isset($p['path'])) {
 			$path = $p['path'];
