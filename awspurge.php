@@ -121,7 +121,8 @@ class AwsPurge
 			$this->runPurgeWorker();
 			wp_cache_replace('aws_purge_lock', 0, '', 5);
 		}
-		wp_send_json($this->getPurgeStatus($lock));
+
+		wp_send_json(array('processed' => count($this->purgeUrls)));
 	}
 
 
@@ -132,38 +133,6 @@ class AwsPurge
 			unset($this->purgeUrls[$key]);
 			update_option('aws_purge_list', $this->purgeUrls);
 		}
-	}
-
-
-	/**
-	 * Get purge process status
-	 * @return array
-	 */
-	private function getPurgeStatus($lock = FALSE)
-	{
-		$total = get_option('aws_purge_total_count');
-
-		// Initialize array with default values, except for the total counter.
-		$info = array(
-			'total' => $total,
-			'remaining' => count($this->purgeUrls),
-			'processed' => 0,
-			'percent' => 100,
-			'lock' => $lock,
-		);
-
-		// Cut statistics gathering when the queue counter equals 0: not running.
-		if ($info['total'] === 0) {
-			return $info;
-		}
-		// Add 'remaining' and 'processed' counters.
-		$info['processed'] = $info['total'] - $info['remaining'];
-
-		// Calculate the percentage of the job.
-		$info['percent'] = ($info['remaining'] / $info['total']) * 100;
-		$info['percent'] = (int)(100 - floor($info['percent']));
-
-		return $info;
 	}
 
 	/**
