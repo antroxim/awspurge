@@ -259,7 +259,7 @@ class AwsPurge
 					curl_setopt($rqst->curl, CURLOPT_HTTPHEADER, $rqst->headers);
 					curl_setopt($rqst->curl, CURLOPT_CUSTOMREQUEST, $rqst->rtype);
 					curl_setopt($rqst->curl, CURLOPT_FAILONERROR, TRUE);
-					curl_setopt($rqst->curl, CURLOPT_HEADER, TRUE);
+					curl_setopt($rqst->curl, CURLOPT_HEADER, FALSE);
 					curl_setopt($rqst->curl, CURLOPT_NOBODY, TRUE);
 
 					// Add our handle to the multiple cURL handle.

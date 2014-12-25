@@ -14,11 +14,11 @@ function AwsPurgeAjax() {
 
     jQuery.ajax({
             url: ajaxurl,
-//            cache: false,
-//            type: 'POST',
+            cache: false,
+            type: 'POST',
             data: {action: 'awspurgeajax'},
             dataType: "json",
-            // context: document.body,
+            context: document.body,
             success: function (data) {
                 apbox_info.slideUp(500, function(){
                     apbox_info.text('Done. ' + data.processed + ' URLs purged. Content changes are now visible');
