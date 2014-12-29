@@ -89,11 +89,11 @@ class AwsPurge
 			status TINYINT NOT NULL,
 			UNIQUE KEY lid (lid)) $charset_collate; ";
 
-			$table_name = $wpdb->prefix . 'awspurge_workers';
-			$sql .= "CREATE TABLE $table_name (
-			wid mediumint(9) NOT NULL AUTO_INCREMENT,
-			pid mediumint(9) NOT NULL,
-			UNIQUE KEY wid (wid)) $charset_collate;";
+//			$table_name = $wpdb->prefix . 'awspurge_workers';
+//			$sql .= "CREATE TABLE $table_name (
+//			wid mediumint(9) NOT NULL AUTO_INCREMENT,
+//			pid mediumint(9) NOT NULL,
+//			UNIQUE KEY wid (wid)) $charset_collate;";
 			require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 			dbDelta($sql);
 			add_option('awspurge_db_version', AWS_PURGE_DB);
@@ -108,7 +108,7 @@ class AwsPurge
 	public function initPurgeScript()
 	{
 		if (!defined('DOING_AJAX')) {
-//			$this->runPurgeWorker();
+			$this->runPurgeWorker();
 		}
 		wp_enqueue_script('awspurge', plugin_dir_url(__FILE__) . 'awspurge.js');
 	}
@@ -186,7 +186,9 @@ class AwsPurge
 			$results = $this->purgeUrl($item->url);
 			foreach ($results as $result) {
 				if ($result->result) {
-					$this->addPathToQueue($item->url, 1);
+					$this->removePathFromQueue($item->lid);
+//					$this->addPathToQueue($item->url, 1);
+
 				} else {
 					$this->addPathToQueue($item->url, 2);
 				}
@@ -197,6 +199,7 @@ class AwsPurge
 				break;
 			}
 		}
+//		$queue = $this->loadQueue();
 	}
 
 
