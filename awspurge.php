@@ -63,11 +63,7 @@ class AwsPurge
 			add_action($event, array($this, 'addPurgePostUrl'), 10, 2);
 		}
 		add_action('shutdown', array($this, 'setPurgeList'));
-		if (!empty($this->purgeUrls)) {
-			add_action('admin_enqueue_scripts', array($this, 'initPurgeScript'));
-		} else {
-			wp_cache_set('aws_purge_lock', 0);
-		}
+//		add_action('admin_enqueue_scripts', array($this, 'initPurgeScript'));
 //		add_action('wp_ajax_awspurgeajax', array($this, 'awsPurgeAjax'));
 		add_action('wp_ajax_nopriv_purgeworker', array($this, 'PurgeWorker'));
 
@@ -152,7 +148,7 @@ class AwsPurge
 
 	}
 
-	public function runPurgeWorker()
+	private function runPurgeWorker()
 	{
 
 		$url = get_option('siteurl') . '/wp-admin/admin-ajax.php?action=purgeworker';
@@ -200,6 +196,7 @@ class AwsPurge
 			}
 		}
 //		$queue = $this->loadQueue();
+//		if()
 	}
 
 
