@@ -60,8 +60,6 @@ class AwsPurge
 
 	public function init()
 	{
-		global $aws_varnish_ips;
-
 		foreach ($this->getRegisterEvents() as $event) {
 			add_action($event, array($this, 'addPurgePostUrl'), 10, 2);
 		}
@@ -184,7 +182,7 @@ class AwsPurge
 			foreach ($results as $result) {
 				if ($result->result) {
 					$this->addPathToQueue($item->url, 1);
-					$this->removePathFromQueue($item->lid);
+//					$this->removePathFromQueue($item->lid);
 				} else {
 					$this->addPathToQueue($item->url, 2);
 				}
@@ -192,7 +190,7 @@ class AwsPurge
 			// Checking how much time we spent
 			$step = microtime(TRUE);
 			if ($max_time < ($step - $start)) {
-				break;
+//				break;
 			}
 		}
 //		$queue = $this->loadQueue();
