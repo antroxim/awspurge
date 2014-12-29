@@ -70,9 +70,9 @@ class AwsPurge
 //		add_action('wp_ajax_awspurgeajax', array($this, 'awsPurgeAjax'));
 		add_action('wp_ajax_nopriv_purgeworker', array($this, 'PurgeWorker'));
 
-		$url = 'http://dev.radaronline.com/category/kardashian-khronicl';
+		$url = 'http://dev.radaronline.com';
 		var_dump($this->purgeUrl($url));
-		var_dump($aws_varnish_ips);
+//		var_dump($aws_varnish_ips);
 
 	}
 
@@ -186,12 +186,11 @@ class AwsPurge
 			$results = $this->purgeUrl($item->url);
 			foreach ($results as $result) {
 				if ($result->result) {
-//					$this->addPathToQueue($item->url, 1);
-
+					$this->addPathToQueue($item->url, 1);
+					$this->removePathFromQueue($item->lid);
 				} else {
 					$this->addPathToQueue($item->url, 2);
 				}
-					$this->removePathFromQueue($item->lid);
 			}
 			// Checking how much time we spent
 			$step = microtime(TRUE);
