@@ -39,6 +39,11 @@ define('AWS_PURGE_QUEUE_LOCK_TIMEOUT', 60);
  */
 define('AWS_PURGE_DIR', __DIR__ . '/');
 
+/**
+ * Define plugin DB version
+ */
+define('AWS_PURGE_DB', '1.0');
+
 
 class AwsPurge
 {
@@ -49,11 +54,6 @@ class AwsPurge
 	public function __construct()
 	{
 		add_action('init', array(&$this, 'init'));
-		$purge_url_cache = get_option('aws_purge_list');
-		if (is_array($purge_url_cache)) {
-			$this->purgeUrls = array_unique($purge_url_cache);
-		}
-
 	}
 
 
@@ -65,19 +65,51 @@ class AwsPurge
 		add_action('shutdown', array($this, 'setPurgeList'));
 		if (!empty($this->purgeUrls)) {
 			add_action('admin_enqueue_scripts', array($this, 'initPurgeScript'));
-		} else{
+		} else {
 			wp_cache_set('aws_purge_lock', 0);
 		}
-		add_action('wp_ajax_awspurgeajax', array($this, 'awsPurgeAjax'));
+//		add_action('wp_ajax_awspurgeajax', array($this, 'awsPurgeAjax'));
+		add_action('wp_ajax_nopriv_purgeworker', array($this, 'PurgeWorker'));
 
+//		$url = 'http://local.radaronline.com/photos/kim-kardashian-khlo';
+//		var_dump($this->purgeUrl($url));
+
+	}
+
+	public function awspurge_install()
+	{
+		if (get_option('awspurge_db_version') != AWS_PURGE_DB) {
+			global $wpdb;
+			// Purge links table
+			$table_name = $wpdb->prefix . 'awspurge_links';
+			$charset_collate = $wpdb->get_charset_collate();
+			$sql = "CREATE TABLE $table_name (
+			lid mediumint(9) NOT NULL AUTO_INCREMENT,
+			url varchar(55) NOT NULL UNIQUE,
+			status TINYINT NOT NULL,
+			UNIQUE KEY lid (lid)) $charset_collate; ";
+
+			$table_name = $wpdb->prefix . 'awspurge_workers';
+			$sql .= "CREATE TABLE $table_name (
+			wid mediumint(9) NOT NULL AUTO_INCREMENT,
+			pid mediumint(9) NOT NULL,
+			UNIQUE KEY wid (wid)) $charset_collate;";
+			require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+			dbDelta($sql);
+			add_option('awspurge_db_version', AWS_PURGE_DB);
+		}
 	}
 
 
 	/**
 	 * Shutdown action
+	 * Sends a request to launch purge worker
 	 */
 	public function initPurgeScript()
 	{
+		if (!defined('DOING_AJAX')) {
+//			$this->runPurgeWorker();
+		}
 		wp_enqueue_script('awspurge', plugin_dir_url(__FILE__) . 'awspurge.js');
 	}
 
@@ -86,8 +118,8 @@ class AwsPurge
 	 */
 	public function setPurgeList()
 	{
-		if (!empty($this->purgeUrls)) {
-			update_option('aws_purge_list', $this->purgeUrls);
+		foreach ($this->purgeUrls as $url) {
+			$this->addPathToQueue($url);
 		}
 	}
 
@@ -105,29 +137,111 @@ class AwsPurge
 
 	function awsPurgeAjax()
 	{
-		if(function_exists('ignore_user_abort')){
+//		if (function_exists('ignore_user_abort')) {
+//			ignore_user_abort(true);
+//		}
+//		$count = count($this->purgeUrls);
+//		$lock = wp_cache_get('aws_purge_lock');
+//		if (!$lock) {
+//			wp_cache_set('aws_purge_lock', 1, '', 5);
+//			$this->runPurgeWorker();
+//			wp_cache_replace('aws_purge_lock', 0, '', 5);
+//		}
+//
+//		wp_send_json(array('processed' => $count));
+
+	}
+
+	public function runPurgeWorker()
+	{
+
+		$url = get_option('siteurl') . '/wp-admin/admin-ajax.php?action=purgeworker';
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
+		curl_exec($ch);
+		$info = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+		curl_close($ch);
+		return $info;
+	}
+
+
+	public function PurgeWorker()
+	{
+		if (function_exists('ignore_user_abort')) {
 			ignore_user_abort(true);
 		}
-		$count = count($this->purgeUrls);
-		$lock = wp_cache_get('aws_purge_lock');
-		if (!$lock) {
-			wp_cache_set('aws_purge_lock', 1, '', 5);
-			$this->runPurgeWorker();
-			wp_cache_replace('aws_purge_lock', 0, '', 5);
-		}
+		header("Connection: close");
+		header("Content-Length: 0");
+		flush();
 
-		wp_send_json(array('processed' => $count));
+		// Using no more than 80% of execution time
+		$max_time = (int)ini_get('max_execution_time');
+		$max_time = $max_time * 0.8;
+		$start = microtime(TRUE);
+		$queue = $this->loadQueue();
+
+		// Loop trough all URLs in database
+		foreach ($queue as $item) {
+			$results = $this->purgeUrl($item->url);
+			foreach ($results as $result) {
+				if ($result->result) {
+					$this->addPathToQueue($item->url, 1);
+				} else {
+					$this->addPathToQueue($item->url, 2);
+				}
+			}
+			// Checking how much time we spent
+			$step = microtime(TRUE);
+			if ($max_time < ($step - $start)) {
+				break;
+			}
+		}
 	}
 
 
-	function runPurgeWorker()
+	/**
+	 * Adds a path to purge queue. If status is specified, updates a status of existing queue item
+	 * @param $path
+	 * @param int $status 0 - unprocessed item, 1 - processed item, 2 - error
+	 */
+	public function addPathToQueue($path, $status = 0)
 	{
-		foreach ($this->purgeUrls as $key => $url) {
-			$this->purgeUrl($url);
-			unset($this->purgeUrls[$key]);
-		}
-			update_option('aws_purge_list', $this->purgeUrls);
+		global $wpdb;
+		$table = $wpdb->prefix . 'awspurge_links';
+		$data = array(
+			'url' => $path,
+			'status' => $status,
+		);
+		$wpdb->replace($table, $data);
 	}
+
+	/**
+	 * Loads entire purge queue
+	 * @return mixed - array of row objects
+	 */
+	private function loadQueue()
+	{
+		global $wpdb;
+		$table = $wpdb->prefix . 'awspurge_links';
+		$query = "SELECT * FROM $table;";
+		return $wpdb->get_results($query);
+	}
+
+	/**
+	 * Removes all paths from queue.
+	 * @param $lid - (optional) link ID to delete specific link
+	 */
+	private function removePathFromQueue($lid)
+	{
+		if (!$lid) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'awspurge_links';
+		$wpdb->query("DELETE FROM $table WHERE lid = $lid");
+	}
+
 
 	/**
 	 * Collects URLs to purge
@@ -226,12 +340,11 @@ class AwsPurge
 
 		}
 
-		$this->processRequest($requests);
-
-		do_action('after_purge_url', $url);
+		return $this->processRequest($requests);
 	}
 
-	private function processRequest($requests){
+	private function processRequest($requests)
+	{
 
 		$single_mode = (count($requests) === 1);
 		$results = array();
@@ -286,9 +399,7 @@ class AwsPurge
 						} while ($mrc == CURLM_CALL_MULTI_PERFORM);
 					}
 				}
-			}
-
-			// In single mode there's only one request to do, use curl_exec().
+			} // In single mode there's only one request to do, use curl_exec().
 			else {
 				curl_exec($results[0]->curl);
 				$single_info = array('result' => curl_errno($results[0]->curl));
@@ -311,15 +422,6 @@ class AwsPurge
 					$results[$i]->result = TRUE;
 				}
 
-				// Collect debugging information if necessary.
-				$results[$i]->error_debug = '';
-				if (!$results[$i]->result) {
-					$debug = curl_getinfo($rqst->curl);
-					$debug['headers'] = implode('|', $rqst->headers);
-					unset($debug['certinfo']);
-				//	$results[$i]->error_debug = _aws_purge_export_debug_symbols($debug);
-				}
-
 				// Remove the handle if parallel processing occurred.
 				if (!$single_mode) {
 					curl_multi_remove_handle($curl_multi, $rqst->curl);
@@ -333,4 +435,5 @@ class AwsPurge
 	}
 }
 
-$purger = new AwsPurge();
+$awspurge = new AwsPurge();
+register_activation_hook(__FILE__, array('AwsPurge', 'awspurge_install'));
