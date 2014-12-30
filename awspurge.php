@@ -67,7 +67,6 @@ class AwsPurge
 //		add_action('wp_ajax_awspurgeajax', array($this, 'awsPurgeAjax'));
 		add_action('wp_ajax_nopriv_purgeworker', array($this, 'PurgeWorker'));
 		add_action('admin_menu', array($this, 'awsPurgeAdminPage'));
-		$this->cleanupQueue();
 	}
 
 	public function awsPurgeAdminPage()
