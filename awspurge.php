@@ -67,6 +67,7 @@ class AwsPurge
 //		add_action('wp_ajax_awspurgeajax', array($this, 'awsPurgeAjax'));
 		add_action('wp_ajax_nopriv_purgeworker', array($this, 'PurgeWorker'));
 		add_action('admin_menu', array($this, 'awsPurgeAdminPage'));
+		$this->cleanupQueue();
 	}
 
 	public function awsPurgeAdminPage()
@@ -78,7 +79,7 @@ class AwsPurge
 	{
 		$queue = $this->loadQueue();
 		// Formatting a table to list results
-		$content = '<table class="wp-list-table widefat"><thead><tr><th>URL</th><th>Request time</th><th>Request status</th><th>CURL data</th></tr></thead>';
+		$content = '<table class="wp-list-table widefat"><thead><tr><th>URL</th><th>Request time</th><th>Request status</th><th>CURL response</th></tr></thead>';
 
 		foreach ($queue as $item) {
 			switch ($item->status) {
@@ -118,7 +119,7 @@ class AwsPurge
 			$charset_collate = $wpdb->get_charset_collate();
 			$sql = "CREATE TABLE $table_name (
 			lid mediumint(9) NOT NULL AUTO_INCREMENT,
-			url varchar(55) NOT NULL UNIQUE,
+			url varchar(255) NOT NULL UNIQUE,
 			status TINYINT NOT NULL,
 			timestamp DATETIME NOT NULL,
 			errordata LONGTEXT,
@@ -196,6 +197,7 @@ class AwsPurge
 	{
 		// Kill worker process before running
 		$this->killWorkerProcess();
+		$this->cleanupQueue();
 		$url = get_option('siteurl') . '/wp-admin/admin-ajax.php?action=purgeworker';
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $url);
@@ -241,7 +243,7 @@ class AwsPurge
 			$results = $this->purgeUrl($item->url);
 			foreach ($results as $result) {
 				if ($result->result) {
-					$this->addPathToQueue($item->url, 2);
+					$this->addPathToQueue($item->url, 2, $result);
 				} else {
 					$this->addPathToQueue($item->url, 3, $result);
 				}
@@ -308,22 +310,18 @@ class AwsPurge
 		if ($status) {
 			$query .= "WHERE status = $status ";
 		}
-		$query .= ' ORDER BY status DESC';
+		$query .= ' ORDER BY timestamp DESC';
 		return $wpdb->get_results($query);
 	}
 
 	/**
-	 * Removes all paths from queue.
-	 * @param $lid - (optional) link ID to delete specific link
+	 * Removes old paths from queue.
 	 */
-	private function removePathFromQueue($lid)
+	private function cleanupQueue()
 	{
-		if (!$lid) {
-			return;
-		}
 		global $wpdb;
 		$table = $wpdb->prefix . 'awspurge_links';
-		$wpdb->query("DELETE FROM $table WHERE lid = $lid");
+		$wpdb->query("DELETE FROM $table WHERE status = '2' AND timestamp <= (NOW() - INTERVAL 1 HOUR )");
 	}
 
 
