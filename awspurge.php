@@ -320,7 +320,7 @@ class AwsPurge
 	{
 		global $wpdb;
 		$table = $wpdb->prefix . 'awspurge_links';
-		$wpdb->query("DELETE FROM $table WHERE status = '2' AND timestamp <= (NOW() - INTERVAL 1 HOUR )");
+		$wpdb->query("DELETE FROM $table WHERE status = '2'");
 	}
 
 
