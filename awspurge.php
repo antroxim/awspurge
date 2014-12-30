@@ -83,10 +83,10 @@ class AwsPurge
 		foreach ($queue as $item) {
 			switch ($item->status) {
 				case 1:
-					$status = 'Unprocessed';
+					$status = 'Purging...';
 					break;
 				case 2:
-					$status = 'Processed';
+					$status = 'Success';
 					break;
 				case 3:
 					$status = 'Error';
