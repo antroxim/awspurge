@@ -242,7 +242,7 @@ class AwsPurge
 			$results = $this->purgeUrl($item->url);
 			foreach ($results as $result) {
 				if ($result->result) {
-					$this->addPathToQueue($item->url, 2, $result);
+					$this->addPathToQueue($item->url, 2);
 				} else {
 					$this->addPathToQueue($item->url, 3, $result);
 				}
