@@ -45,7 +45,6 @@ define('AWS_PURGE_DIR', __DIR__ . '/');
 define('AWS_PURGE_DB', '1.0');
 
 
-
 class AwsPurge
 {
 
@@ -64,10 +63,49 @@ class AwsPurge
 			add_action($event, array($this, 'addPurgePostUrl'), 10, 2);
 		}
 		add_action('shutdown', array($this, 'setPurgeList'));
-//		add_action('admin_enqueue_scripts', array($this, 'initPurgeScript'));
+		add_action('admin_enqueue_scripts', array($this, 'initPurgeScript'));
 //		add_action('wp_ajax_awspurgeajax', array($this, 'awsPurgeAjax'));
 		add_action('wp_ajax_nopriv_purgeworker', array($this, 'PurgeWorker'));
+		add_action('admin_menu', array($this, 'awsPurgeAdminPage'));
+	}
 
+	public function awsPurgeAdminPage()
+	{
+		add_menu_page('AWS Purge status', 'AWS Purge', 'manage_options', 'aws-plugin', array($this, 'awsPurgeAdminPageContent'));
+	}
+
+	public function awsPurgeAdminPageContent()
+	{
+		$queue = $this->loadQueue();
+		// Formatting a table to list results
+		$content = '<table class="wp-list-table widefat"><thead><tr><th>URL</th><th>Request time</th><th>Request status</th><th>CURL data</th></tr></thead>';
+
+		foreach ($queue as $item) {
+			switch ($item->status) {
+				case 1:
+					$status = 'Unprocessed';
+					break;
+				case 2:
+					$status = 'Processed';
+					break;
+				case 3:
+					$status = 'Error';
+					break;
+			}
+			$response = '';
+			if ($item->errordata) {
+				$errordata = unserialize($item->errordata);
+				if (isset($errordata->headers)) {
+					unset($errordata->headers);
+				}
+				foreach ($errordata as $title => $data) {
+					$response .= $title . ' => ' . $data . '</br>';
+				}
+			}
+			$content .= "<tr><td>$item->url</td><td>$item->timestamp</td><td>$status</td><td>$response</td></tr>";
+		}
+		$content .= '</table>';
+		print $content;
 
 	}
 
@@ -82,13 +120,17 @@ class AwsPurge
 			lid mediumint(9) NOT NULL AUTO_INCREMENT,
 			url varchar(55) NOT NULL UNIQUE,
 			status TINYINT NOT NULL,
+			timestamp DATETIME NOT NULL,
+			errordata LONGTEXT,
 			UNIQUE KEY lid (lid)) $charset_collate; ";
+			require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 
-//			$table_name = $wpdb->prefix . 'awspurge_workers';
-//			$sql .= "CREATE TABLE $table_name (
-//			wid mediumint(9) NOT NULL AUTO_INCREMENT,
-//			pid mediumint(9) NOT NULL,
-//			UNIQUE KEY wid (wid)) $charset_collate;";
+			$table_name = $wpdb->prefix . 'awspurge_worker';
+			$sql .= "CREATE TABLE $table_name (
+			pid mediumint(9) NOT NULL,
+			processed mediumint(9) NOT NULL,
+			UNIQUE KEY pid (pid)) $charset_collate; ";
+
 			require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 			dbDelta($sql);
 			add_option('awspurge_db_version', AWS_PURGE_DB);
@@ -105,7 +147,7 @@ class AwsPurge
 		if (!defined('DOING_AJAX')) {
 			$this->runPurgeWorker();
 		}
-		wp_enqueue_script('awspurge', plugin_dir_url(__FILE__) . 'awspurge.js');
+//		 wp_enqueue_script('awspurge', plugin_dir_url(__FILE__) . 'awspurge.js');
 	}
 
 	/**
@@ -147,9 +189,14 @@ class AwsPurge
 
 	}
 
+	/**
+	 * Sends request to run worker
+	 * @return mixed - curl response status code
+	 */
 	private function runPurgeWorker()
 	{
-
+		// Kill worker process before running
+		$this->killWorkerProcess();
 		$url = get_option('siteurl') . '/wp-admin/admin-ajax.php?action=purgeworker';
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $url);
@@ -160,69 +207,108 @@ class AwsPurge
 		return $info;
 	}
 
+	/**
+	 * Kills worker processes
+	 */
+	private function killWorkerProcess()
+	{
+		foreach ($this->workerLock() as $item) {
+			posix_kill($item->pid, 9);
+		}
+		$this->workerLock('delete');
+	}
 
+	/**
+	 * Purge worker
+	 */
 	public function PurgeWorker()
 	{
+		$this->workerLock('set');
 		if (function_exists('ignore_user_abort')) {
 			ignore_user_abort(true);
 		}
 		header("Connection: close");
 		header("Content-Length: 0");
 		flush();
-
 		// Using no more than 80% of execution time
 		$max_time = (int)ini_get('max_execution_time');
 		$max_time = $max_time * 0.8;
 		$start = microtime(TRUE);
-		$queue = $this->loadQueue();
+		$queue = $this->loadQueue(1);
 
 		// Loop trough all URLs in database
 		foreach ($queue as $item) {
 			$results = $this->purgeUrl($item->url);
 			foreach ($results as $result) {
 				if ($result->result) {
-					$this->addPathToQueue($item->url, 1);
-//					$this->removePathFromQueue($item->lid);
-				} else {
 					$this->addPathToQueue($item->url, 2);
+				} else {
+					$this->addPathToQueue($item->url, 3, $result);
 				}
 			}
 			// Checking how much time we spent
 			$step = microtime(TRUE);
 			if ($max_time < ($step - $start)) {
-//				break;
+				break;
 			}
 		}
-//		$queue = $this->loadQueue();
-//		if()
+		$this->workerLock('delete');
+		if ($this->loadQueue(1)) {
+			$this->runPurgeWorker();
+		}
 	}
 
+	/**
+	 * Worker lock handler
+	 * @param $lock (string) - 'set' sets lock, 'delete' - releases, left empty - returns current lock status
+	 */
+	public function workerLock($lock = FALSE)
+	{
+		global $wpdb;
+		$table = $wpdb->prefix . 'awspurge_worker';
+		if ($lock == 'set') {
+			$wpdb->insert($table, array('pid' => posix_getpid()));
+		} elseif ($lock == 'delete') {
+			$wpdb->query("DELETE FROM $table");
+		} else {
+			return $wpdb->get_results("SELECT pid FROM $table");
+		}
+	}
 
 	/**
 	 * Adds a path to purge queue. If status is specified, updates a status of existing queue item
 	 * @param $path
-	 * @param int $status 0 - unprocessed item, 1 - processed item, 2 - error
+	 * @param int $status 1 - unprocessed item, 2 - processed item, 3 - error
 	 */
-	public function addPathToQueue($path, $status = 0)
+	public function addPathToQueue($path, $status = 1, $error = NULL)
 	{
 		global $wpdb;
 		$table = $wpdb->prefix . 'awspurge_links';
 		$data = array(
 			'url' => $path,
 			'status' => $status,
+			'timestamp' => current_time('mysql', 1),
 		);
+		if ($error) {
+			$data['errordata'] = serialize($error);
+		}
 		$wpdb->replace($table, $data);
 	}
 
 	/**
-	 * Loads entire purge queue
+	 * Loads items from purge queue
+	 * @param $status - select items with status (1 - unprocessed, 2 - processed, 3 - error)
 	 * @return mixed - array of row objects
 	 */
-	private function loadQueue()
+	private function loadQueue($status = FALSE)
 	{
 		global $wpdb;
 		$table = $wpdb->prefix . 'awspurge_links';
-		$query = "SELECT * FROM $table;";
+		$query = "SELECT * FROM $table ";
+		if ($status) {
+			$query .= "WHERE status = $status ";
+		}
+		$query .= ' ORDER BY status DESC';
 		return $wpdb->get_results($query);
 	}
 
@@ -410,14 +496,14 @@ class AwsPurge
 					continue;
 				}
 				$info = $single_mode ? $single_info : curl_multi_info_read($curl_multi);
-				$results[$i]->result = ($info['result'] == CURLE_OK) ? TRUE : FALSE;
+				$results[$i]->result = ($info['result'] == CURLE_OK) ? 1 : 0;
 				$results[$i]->error_curl = $info['result'];
 				$results[$i]->error_http = curl_getinfo($rqst->curl, CURLINFO_HTTP_CODE);
 
 				// When the result failed but the HTTP code is 404 we turn the result
 				// into a TRUE as Varnish simply couldn't find the entry as its not there.
 				if ((!$results[$i]->result) && ($results[$i]->error_http == 404)) {
-					$results[$i]->result = TRUE;
+					$results[$i]->result = 1;
 				}
 
 				// Remove the handle if parallel processing occurred.
