@@ -199,6 +199,7 @@ class AwsPurge
 		$url = get_option('siteurl') . '/wp-admin/admin-ajax.php?action=purgeworker';
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_COOKIE, 'ami_dev=ami_dev');
 		curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
 		curl_exec($ch);
 		$info = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
