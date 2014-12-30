@@ -128,7 +128,6 @@ class AwsPurge
 			$table_name = $wpdb->prefix . 'awspurge_worker';
 			$sql .= "CREATE TABLE $table_name (
 			pid mediumint(9) NOT NULL,
-			processed mediumint(9) NOT NULL,
 			UNIQUE KEY pid (pid)) $charset_collate; ";
 
 			require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
