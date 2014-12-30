@@ -163,6 +163,7 @@ class AwsPurge
 	{
 		return array(
 			'save_post',
+			'publish_post',
 			'deleted_post',
 			'trashed_post',
 			'edit_post',
